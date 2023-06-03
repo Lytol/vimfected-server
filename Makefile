@@ -8,7 +8,7 @@ build:
 test:
 	go test ./...
 
-run:
+run: build
 	@./${BINARY_NAME}
 
 clean:

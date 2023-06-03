@@ -1,11 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 
 	"github.com/urfave/cli/v2"
+
+	"github.com/Lytol/vimfected-server/server"
 )
 
 func main() {
@@ -13,8 +14,8 @@ func main() {
 		Name:  "server",
 		Usage: "run a vimfected server instance",
 		Action: func(*cli.Context) error {
-			fmt.Printf("Running vimfected...\n")
-			return nil
+			s := server.NewServer()
+			return s.Run()
 		},
 	}
 
