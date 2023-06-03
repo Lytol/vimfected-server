@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"net"
@@ -23,12 +24,19 @@ type Server struct {
 	serveMux http.ServeMux
 }
 
-func NewServer() *Server {
-	s := &Server{
-		Game: game.New(),
+func NewServer() (*Server, error) {
+	var err error
+
+	s := &Server{}
+
+	s.Game, err = game.New()
+	if err != nil {
+		return nil, err
 	}
+
 	s.serveMux.HandleFunc("/", s.handle)
-	return s
+
+	return s, nil
 }
 
 func (s *Server) Run() error {
@@ -116,15 +124,30 @@ func (s *Server) subscribe(ctx context.Context, ws *websocket.Conn) error {
 
 		switch cmd.Type {
 		case Register:
-			player, err = s.Game.CreatePlayer(cmd.Data["id"])
+			var data RegisterData
+
+			err = json.Unmarshal(cmd.Data, &data)
+			if err != nil {
+				return ws.Close(websocket.StatusProtocolError, "Invalid data for register")
+			}
+
+			player, err = s.Game.CreatePlayer(data.Id)
 			if err != nil {
 				return ws.Close(websocket.StatusProtocolError, "Unable to register player")
 			}
 			defer s.Game.RemovePlayer(player)
+
+			snapshot, err := SnapshotCommand(s.Game)
+			if err != nil {
+				return ws.Close(websocket.StatusProtocolError, "Unable to create snapshot")
+			}
+
+			err = wsjson.Write(ctx, ws, snapshot)
+			if err != nil {
+				return ws.Close(websocket.StatusProtocolError, "Unable to write snapshot")
+			}
 		default:
-			log.Printf("Command | type: %d | data: %+v\n", cmd.Type, cmd.Data)
+			log.Printf("Command | type: %s | data: %+v\n", cmd.Type, cmd.Data)
 		}
 	}
-
-	return ws.Close(websocket.StatusNormalClosure, "closed normally")
 }

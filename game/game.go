@@ -7,12 +7,22 @@ import (
 
 type Game struct {
 	Players map[string]*Player
+	Map     *Map
 }
 
-func New() *Game {
-	return &Game{
+func New() (*Game, error) {
+	var err error
+
+	g := &Game{
 		Players: make(map[string]*Player),
 	}
+
+	g.Map, err = NewMap(DefaultMapWidth, DefaultMapHeight)
+	if err != nil {
+		return nil, err
+	}
+
+	return g, nil
 }
 
 func (g *Game) CreatePlayer(id string) (*Player, error) {
@@ -32,4 +42,24 @@ func (g *Game) RemovePlayer(p *Player) error {
 	}
 	log.Printf("Removed player: %s\n", p.Id)
 	return nil
+}
+
+func (g *Game) Snapshot() *Snapshot {
+	snapshot := &Snapshot{
+		Players: make([]*Player, len(g.Players)),
+		Map:     g.Map,
+	}
+
+	i := 0
+	for _, player := range g.Players {
+		snapshot.Players[i] = player
+		i += 1
+	}
+
+	return snapshot
+}
+
+type Snapshot struct {
+	Players []*Player
+	Map     *Map
 }

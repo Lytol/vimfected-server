@@ -14,7 +14,10 @@ func main() {
 		Name:  "server",
 		Usage: "run a vimfected server instance",
 		Action: func(*cli.Context) error {
-			s := server.NewServer()
+			s, err := server.NewServer()
+			if err != nil {
+				return err
+			}
 			return s.Run()
 		},
 	}
