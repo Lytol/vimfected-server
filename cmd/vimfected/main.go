@@ -6,6 +6,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/Lytol/vimfected-server/game"
 	"github.com/Lytol/vimfected-server/server"
 )
 
@@ -14,7 +15,12 @@ func main() {
 		Name:  "server",
 		Usage: "run a vimfected server instance",
 		Action: func(*cli.Context) error {
-			s, err := server.NewServer()
+			g, err := game.New()
+			if err != nil {
+				return err
+			}
+
+			s, err := server.NewServer(g)
 			if err != nil {
 				return err
 			}

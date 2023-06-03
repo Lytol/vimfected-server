@@ -2,8 +2,8 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -15,23 +15,21 @@ import (
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 
+	"github.com/Lytol/vimfected-server/commands"
 	"github.com/Lytol/vimfected-server/game"
 )
 
 type Server struct {
-	Game *game.Game
+	Game        *game.Game
+	Subscribers map[string]*websocket.Conn
 
 	serveMux http.ServeMux
 }
 
-func NewServer() (*Server, error) {
-	var err error
-
-	s := &Server{}
-
-	s.Game, err = game.New()
-	if err != nil {
-		return nil, err
+func NewServer(g *game.Game) (*Server, error) {
+	s := &Server{
+		Game:        g,
+		Subscribers: make(map[string]*websocket.Conn),
 	}
 
 	s.serveMux.HandleFunc("/", s.handle)
@@ -40,6 +38,8 @@ func NewServer() (*Server, error) {
 }
 
 func (s *Server) Run() error {
+	go s.Game.Run()
+
 	l, err := net.Listen("tcp", ":3000")
 	if err != nil {
 		return err
@@ -70,7 +70,7 @@ func (s *Server) Run() error {
 	defer cancel()
 
 	log.Printf("shutting down\n")
-
+	s.Game.Stop()
 	return hs.Shutdown(ctx)
 }
 
@@ -111,10 +111,12 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) subscribe(ctx context.Context, ws *websocket.Conn) error {
 	var (
-		cmd    Command
-		err    error
-		player *game.Player
+		cmd        commands.Command
+		err        error
+		registered bool
 	)
+
+	registered = false
 
 	for {
 		err = wsjson.Read(ctx, ws, &cmd)
@@ -122,32 +124,40 @@ func (s *Server) subscribe(ctx context.Context, ws *websocket.Conn) error {
 			return err
 		}
 
-		switch cmd.Type {
-		case Register:
-			var data RegisterData
+		if !registered && cmd.Type == commands.Register {
+			log.Printf("subscribing %s\n", cmd.Id)
+			s.Subscribers[cmd.Id] = ws
+			defer func() {
+				log.Printf("unsubscribing %s\n", cmd.Id)
+				delete(s.Subscribers, cmd.Id)
+			}()
 
-			err = json.Unmarshal(cmd.Data, &data)
+			snapshot, err := s.Game.SnapshotCommand()
 			if err != nil {
-				return ws.Close(websocket.StatusProtocolError, "Invalid data for register")
+				return err
+			}
+			s.Send(cmd.Id, snapshot)
+
+			spawn, err := commands.SpawnPlayerCommand(cmd.Id)
+			if err != nil {
+				return err
 			}
 
-			player, err = s.Game.CreatePlayer(data.Id)
-			if err != nil {
-				return ws.Close(websocket.StatusProtocolError, "Unable to register player")
-			}
-			defer s.Game.RemovePlayer(player)
-
-			snapshot, err := SnapshotCommand(s.Game)
-			if err != nil {
-				return ws.Close(websocket.StatusProtocolError, "Unable to create snapshot")
-			}
-
-			err = wsjson.Write(ctx, ws, snapshot)
-			if err != nil {
-				return ws.Close(websocket.StatusProtocolError, "Unable to write snapshot")
-			}
-		default:
-			log.Printf("Command | type: %s | data: %+v\n", cmd.Type, cmd.Data)
+			s.Game.Queue(spawn)
+			registered = true
+		} else if !registered {
+			return fmt.Errorf("player has not registered")
+		} else {
+			s.Game.Queue(cmd)
 		}
 	}
+}
+
+func (s *Server) Send(Id string, cmd commands.Command) error {
+	subscriber, ok := s.Subscribers[Id]
+	if !ok {
+		return fmt.Errorf("subscriber does not exist: %s", Id)
+	}
+
+	return wsjson.Write(context.TODO(), subscriber, cmd)
 }
