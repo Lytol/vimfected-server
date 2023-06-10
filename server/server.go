@@ -39,6 +39,9 @@ func NewServer(g *game.Game) (*Server, error) {
 
 func (s *Server) Run() error {
 	go s.Game.Run()
+	go s.Game.Notifier(func(cmd commands.Command) error {
+		return s.Broadcast(cmd)
+	})
 
 	l, err := net.Listen("tcp", ":3000")
 	if err != nil {
@@ -132,18 +135,17 @@ func (s *Server) subscribe(ctx context.Context, ws *websocket.Conn) error {
 				delete(s.Subscribers, cmd.Id)
 			}()
 
+			err = s.Game.SpawnPlayer(cmd.Id)
+			if err != nil {
+				return err
+			}
+
 			snapshot, err := s.Game.SnapshotCommand()
 			if err != nil {
 				return err
 			}
 			s.Send(cmd.Id, snapshot)
 
-			spawn, err := commands.SpawnPlayerCommand(cmd.Id)
-			if err != nil {
-				return err
-			}
-
-			s.Game.Queue(spawn)
 			registered = true
 		} else if !registered {
 			return fmt.Errorf("player has not registered")
@@ -158,6 +160,15 @@ func (s *Server) Send(Id string, cmd commands.Command) error {
 	if !ok {
 		return fmt.Errorf("subscriber does not exist: %s", Id)
 	}
-
 	return wsjson.Write(context.TODO(), subscriber, cmd)
+}
+
+func (s *Server) Broadcast(cmd commands.Command) error {
+	for _, subscriber := range s.Subscribers {
+		err := wsjson.Write(context.TODO(), subscriber, cmd)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

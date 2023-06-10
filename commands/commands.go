@@ -10,6 +10,7 @@ const (
 	Register      Type = "register"
 	Snapshot      Type = "snapshot"
 	SpawnPlayer   Type = "spawn_player"
+	AddPlayer     Type = "add_player"
 	MoveDirection Type = "move_direction"
 	MovePosition  Type = "move_position"
 )
@@ -21,6 +22,11 @@ type Command struct {
 }
 
 type RegisterData struct{}
+
+type SpawnData struct {
+	X int64 `json:"x"`
+	Y int64 `json:"y"`
+}
 
 func SpawnPlayerCommand(id string) (Command, error) {
 	return Command{

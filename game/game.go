@@ -1,10 +1,9 @@
 package game
 
 import (
-	"container/list"
-	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"runtime"
 	"time"
 
@@ -12,13 +11,16 @@ import (
 )
 
 const (
-	TickRate = 60
+	TickRate            = 60
+	CommandOutputBuffer = 100
 )
 
 type Game struct {
-	Commands *list.List
-	Players  map[string]*Player
-	Map      *Map
+	Players map[string]*Player
+	Map     *Map
+
+	Incoming *commands.Queue
+	Outgoing chan commands.Command
 
 	quit chan bool
 }
@@ -27,9 +29,11 @@ func New() (*Game, error) {
 	var err error
 
 	g := &Game{
-		Commands: list.New(),
-		Players:  make(map[string]*Player),
-		quit:     make(chan bool),
+		Players: make(map[string]*Player),
+		quit:    make(chan bool),
+
+		Incoming: commands.NewQueue(),
+		Outgoing: make(chan commands.Command, CommandOutputBuffer),
 	}
 
 	g.Map, err = NewMap(DefaultMapWidth, DefaultMapHeight)
@@ -64,35 +68,74 @@ func (g *Game) Run() {
 	}
 }
 
+type Notify func(cmd commands.Command) error
+
+func (g *Game) Notifier(notify Notify) {
+	for {
+		select {
+		case cmd := <-g.Outgoing:
+			log.Printf("Outgoing Command %s | Id: %s | %s\n", cmd.Type, cmd.Id, cmd.Data)
+			err := notify(cmd)
+			if err != nil {
+				log.Printf("Notifier error: %v\n", err)
+			}
+		case <-g.quit:
+			return
+		}
+	}
+}
+
 func (g *Game) Stop() {
 	g.quit <- true
+}
+
+func (g *Game) Queue(cmd commands.Command) {
+	g.Incoming.Shift(cmd)
 }
 
 func (g *Game) Update(delta float64) {
 	// Process all pending commands
 	for {
-		cmd, ok := g.Dequeue()
+		cmd, ok := g.Incoming.Unshift()
 		if !ok {
 			return
 		}
-		log.Printf("Command %s | Id: %s | %s\n", cmd.Type, cmd.Id, cmd.Data)
+		log.Printf("Incoming Command %s | Id: %s | %s\n", cmd.Type, cmd.Id, cmd.Data)
+		g.handleCommand(cmd)
 	}
 }
 
-func (g *Game) Queue(cmd commands.Command) {
-	g.Commands.PushBack(cmd)
-}
-
-func (g *Game) Dequeue() (commands.Command, bool) {
-	if g.Commands.Len() == 0 {
-		return commands.Command{}, false
+func (g *Game) handleCommand(cmd commands.Command) {
+	switch cmd.Type {
+	case commands.SpawnPlayer:
+		g.Outgoing <- cmd
+	default:
+		log.Printf("Unknown command: %s\n", cmd.Type)
 	}
-	return g.Commands.Remove(g.Commands.Front()).(commands.Command), true
 }
 
-func (g *Game) CreatePlayer(id string) (*Player, error) {
+func (g *Game) SpawnPlayer(id string) error {
+	x, y := g.findSpawn()
+	player, err := g.CreatePlayer(id, x, y)
+	if err != nil {
+		return err
+	}
+
+	cmd, err := g.AddPlayerCommand(player)
+	if err != nil {
+		return err
+	}
+
+	g.Outgoing <- cmd
+
+	return nil
+}
+
+func (g *Game) CreatePlayer(id string, x int64, y int64) (*Player, error) {
 	p := &Player{
 		Id: id,
+		X:  x,
+		Y:  y,
 	}
 	g.Players[id] = p
 	log.Printf("Created player: %s\n", p.Id)
@@ -109,31 +152,22 @@ func (g *Game) RemovePlayer(p *Player) error {
 	return nil
 }
 
-type snapshotData struct {
-	Players []*Player `json:"players"`
-	Map     *Map      `json:"map"`
+func (g *Game) findSpawn() (int64, int64) {
+	for {
+		x := rand.Int63n(g.Map.Width)
+		y := rand.Int63n(g.Map.Height)
+
+		if g.playerAt(x, y) == nil {
+			return x, y
+		}
+	}
 }
 
-func (g *Game) SnapshotCommand() (commands.Command, error) {
-	players := make([]*Player, len(g.Players))
-	i := 0
+func (g *Game) playerAt(x int64, y int64) *Player {
 	for _, player := range g.Players {
-		players[i] = player
-		i++
+		if player.X == x && player.Y == y {
+			return player
+		}
 	}
-
-	snapshotData := snapshotData{
-		Players: players,
-		Map:     g.Map,
-	}
-
-	data, err := json.Marshal(snapshotData)
-	if err != nil {
-		return commands.Command{}, err
-	}
-
-	return commands.Command{
-		Type: commands.Snapshot,
-		Data: data,
-	}, nil
+	return nil
 }
