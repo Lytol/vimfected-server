@@ -6,8 +6,6 @@ import (
 	"math/rand"
 	"runtime"
 	"time"
-
-	"github.com/Lytol/vimfected-server/commands"
 )
 
 const (
@@ -19,8 +17,8 @@ type Game struct {
 	Players map[string]*Player
 	Map     *Map
 
-	Incoming *commands.Queue
-	Outgoing chan commands.Command
+	Incoming *Queue
+	Outgoing chan Command
 
 	quit chan bool
 }
@@ -32,8 +30,8 @@ func New() (*Game, error) {
 		Players: make(map[string]*Player),
 		quit:    make(chan bool),
 
-		Incoming: commands.NewQueue(),
-		Outgoing: make(chan commands.Command, CommandOutputBuffer),
+		Incoming: NewQueue(),
+		Outgoing: make(chan Command, CommandOutputBuffer),
 	}
 
 	g.Map, err = NewMap(DefaultMapWidth, DefaultMapHeight)
@@ -68,7 +66,7 @@ func (g *Game) Run() {
 	}
 }
 
-type Notify func(cmd commands.Command) error
+type Notify func(cmd Command) error
 
 func (g *Game) Notifier(notify Notify) {
 	for {
@@ -89,7 +87,7 @@ func (g *Game) Stop() {
 	g.quit <- true
 }
 
-func (g *Game) Queue(cmd commands.Command) {
+func (g *Game) Queue(cmd Command) {
 	g.Incoming.Shift(cmd)
 }
 
@@ -101,14 +99,13 @@ func (g *Game) Update(delta float64) {
 			return
 		}
 		log.Printf("Incoming Command %s | Id: %s | %s\n", cmd.Type, cmd.Id, cmd.Data)
+
 		g.handleCommand(cmd)
 	}
 }
 
-func (g *Game) handleCommand(cmd commands.Command) {
+func (g *Game) handleCommand(cmd Command) {
 	switch cmd.Type {
-	case commands.SpawnPlayer:
-		g.Outgoing <- cmd
 	default:
 		log.Printf("Unknown command: %s\n", cmd.Type)
 	}
@@ -128,19 +125,20 @@ func (g *Game) SpawnPlayer(id string) (*Player, error) {
 		return nil, err
 	}
 
-	cmd, err := g.AddPlayerCommand(player)
-	if err != nil {
-		return nil, err
-	}
-
-	g.Outgoing <- cmd
-
 	return player, nil
 }
 
 func (g *Game) AddPlayer(p *Player) error {
 	g.Players[p.Id] = p
 	log.Printf("Added player: %s\n", p.Id)
+
+	cmd, err := AddPlayerCommand(p)
+	if err != nil {
+		return err
+	}
+
+	g.Outgoing <- cmd
+
 	return nil
 }
 
@@ -151,6 +149,14 @@ func (g *Game) RemovePlayer(p *Player) error {
 		return fmt.Errorf("cannot remove player, does not exist: %s", p.Id)
 	}
 	log.Printf("Removed player: %s\n", p.Id)
+
+	cmd, err := RemovePlayerCommand(p)
+	if err != nil {
+		return err
+	}
+
+	g.Outgoing <- cmd
+
 	return nil
 }
 

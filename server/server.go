@@ -15,7 +15,6 @@ import (
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 
-	"github.com/Lytol/vimfected-server/commands"
 	"github.com/Lytol/vimfected-server/game"
 )
 
@@ -39,7 +38,7 @@ func NewServer(g *game.Game) (*Server, error) {
 
 func (s *Server) Run() error {
 	go s.Game.Run()
-	go s.Game.Notifier(func(cmd commands.Command) error {
+	go s.Game.Notifier(func(cmd game.Command) error {
 		return s.Broadcast(cmd)
 	})
 
@@ -114,7 +113,7 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) subscribe(ctx context.Context, ws *websocket.Conn) error {
 	var (
-		cmd        commands.Command
+		cmd        game.Command
 		err        error
 		registered bool
 	)
@@ -127,7 +126,7 @@ func (s *Server) subscribe(ctx context.Context, ws *websocket.Conn) error {
 			return err
 		}
 
-		if !registered && cmd.Type == commands.Register {
+		if !registered && cmd.Type == game.Register {
 			log.Printf("subscribing %s\n", cmd.Id)
 			s.Subscribers[cmd.Id] = ws
 			defer func() {
@@ -139,9 +138,11 @@ func (s *Server) subscribe(ctx context.Context, ws *websocket.Conn) error {
 			if err != nil {
 				return err
 			}
-			defer s.Game.RemovePlayer(player)
+			defer func() {
+				s.Game.RemovePlayer(player)
+			}()
 
-			snapshot, err := s.Game.SnapshotCommand()
+			snapshot, err := game.SnapshotCommand(s.Game)
 			if err != nil {
 				return err
 			}
@@ -151,12 +152,13 @@ func (s *Server) subscribe(ctx context.Context, ws *websocket.Conn) error {
 		} else if !registered {
 			return fmt.Errorf("player has not registered")
 		} else {
+
 			s.Game.Queue(cmd)
 		}
 	}
 }
 
-func (s *Server) Send(Id string, cmd commands.Command) error {
+func (s *Server) Send(Id string, cmd game.Command) error {
 	subscriber, ok := s.Subscribers[Id]
 	if !ok {
 		return fmt.Errorf("subscriber does not exist: %s", Id)
@@ -164,7 +166,7 @@ func (s *Server) Send(Id string, cmd commands.Command) error {
 	return wsjson.Write(context.TODO(), subscriber, cmd)
 }
 
-func (s *Server) Broadcast(cmd commands.Command) error {
+func (s *Server) Broadcast(cmd game.Command) error {
 	for _, subscriber := range s.Subscribers {
 		err := wsjson.Write(context.TODO(), subscriber, cmd)
 		if err != nil {
