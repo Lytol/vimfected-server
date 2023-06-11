@@ -114,32 +114,34 @@ func (g *Game) handleCommand(cmd commands.Command) {
 	}
 }
 
-func (g *Game) SpawnPlayer(id string) error {
+func (g *Game) SpawnPlayer(id string) (*Player, error) {
 	x, y := g.findSpawn()
-	player, err := g.CreatePlayer(id, x, y)
-	if err != nil {
-		return err
-	}
 
-	cmd, err := g.AddPlayerCommand(player)
-	if err != nil {
-		return err
-	}
-
-	g.Outgoing <- cmd
-
-	return nil
-}
-
-func (g *Game) CreatePlayer(id string, x int64, y int64) (*Player, error) {
-	p := &Player{
+	player := &Player{
 		Id: id,
 		X:  x,
 		Y:  y,
 	}
-	g.Players[id] = p
-	log.Printf("Created player: %s\n", p.Id)
-	return p, nil
+
+	err := g.AddPlayer(player)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd, err := g.AddPlayerCommand(player)
+	if err != nil {
+		return nil, err
+	}
+
+	g.Outgoing <- cmd
+
+	return player, nil
+}
+
+func (g *Game) AddPlayer(p *Player) error {
+	g.Players[p.Id] = p
+	log.Printf("Added player: %s\n", p.Id)
+	return nil
 }
 
 func (g *Game) RemovePlayer(p *Player) error {

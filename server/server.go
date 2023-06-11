@@ -135,10 +135,11 @@ func (s *Server) subscribe(ctx context.Context, ws *websocket.Conn) error {
 				delete(s.Subscribers, cmd.Id)
 			}()
 
-			err = s.Game.SpawnPlayer(cmd.Id)
+			player, err := s.Game.SpawnPlayer(cmd.Id)
 			if err != nil {
 				return err
 			}
+			defer s.Game.RemovePlayer(player)
 
 			snapshot, err := s.Game.SnapshotCommand()
 			if err != nil {
