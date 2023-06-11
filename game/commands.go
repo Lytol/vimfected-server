@@ -11,6 +11,9 @@ const (
 	Snapshot     Type = "snapshot"
 	AddPlayer    Type = "add_player"
 	RemovePlayer Type = "remove_player"
+	MovePlayer   Type = "move_player"
+
+	MovePlayerInput Type = "move_player_input"
 )
 
 type Command struct {
@@ -83,6 +86,29 @@ func RemovePlayerCommand(player *Player) (Command, error) {
 
 	return Command{
 		Type: RemovePlayer,
+		Id:   player.Id,
+		Data: data,
+	}, nil
+}
+
+type MovePlayerInputData struct {
+	Direction Direction `json:"direction"`
+}
+
+type MovePlayerData struct {
+	*Player
+}
+
+func MovePlayerCommand(player *Player) (Command, error) {
+	movePlayerData := MovePlayerData{player}
+
+	data, err := json.Marshal(movePlayerData)
+	if err != nil {
+		return Command{}, err
+	}
+
+	return Command{
+		Type: MovePlayer,
 		Id:   player.Id,
 		Data: data,
 	}, nil

@@ -11,6 +11,15 @@ const (
 	GrassDefault = 317
 )
 
+type Direction string
+
+const (
+	DirectionUp    Direction = "up"
+	DirectionDown  Direction = "down"
+	DirectionLeft  Direction = "left"
+	DirectionRight Direction = "right"
+)
+
 type Map struct {
 	Width  int64     `json:"width"`
 	Height int64     `json:"height"`

@@ -1,6 +1,7 @@
 package game
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
@@ -106,6 +107,23 @@ func (g *Game) Update(delta float64) {
 
 func (g *Game) handleCommand(cmd Command) {
 	switch cmd.Type {
+	case MovePlayerInput:
+		var movePlayerInputData MovePlayerInputData
+
+		err := json.Unmarshal(cmd.Data, &movePlayerInputData)
+		if err != nil {
+			log.Printf("Error unmarshalling move player input data: %v\n", err)
+			return
+		}
+
+		// TODO: players should only be able to move themselves
+		player, ok := g.Players[cmd.Id]
+		if !ok {
+			log.Printf("Player not found: %s\n", cmd.Id)
+			return
+		}
+
+		g.MovePlayer(player, movePlayerInputData.Direction)
 	default:
 		log.Printf("Unknown command: %s\n", cmd.Type)
 	}
@@ -158,6 +176,46 @@ func (g *Game) RemovePlayer(p *Player) error {
 	g.Outgoing <- cmd
 
 	return nil
+}
+
+func (g *Game) MovePlayer(player *Player, dir Direction) bool {
+	if !player.IsReadyToMove() {
+		return false
+	}
+
+	newX := player.X
+	newY := player.Y
+
+	switch dir {
+	case DirectionUp:
+		newY--
+	case DirectionDown:
+		newY++
+	case DirectionLeft:
+		newX--
+	case DirectionRight:
+		newX++
+	}
+
+	if newX < 0 || newX >= g.Map.Width || newY < 0 || newY >= g.Map.Height {
+		return false
+	}
+
+	if g.playerAt(newX, newY) != nil {
+		return false
+	}
+
+	player.Move(newX, newY)
+
+	cmd, err := MovePlayerCommand(player)
+	if err != nil {
+		log.Printf("Error creating move player command: %v\n", err)
+		return false
+	}
+
+	g.Outgoing <- cmd
+
+	return true
 }
 
 func (g *Game) findSpawn() (int64, int64) {

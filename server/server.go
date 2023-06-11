@@ -152,7 +152,6 @@ func (s *Server) subscribe(ctx context.Context, ws *websocket.Conn) error {
 		} else if !registered {
 			return fmt.Errorf("player has not registered")
 		} else {
-
 			s.Game.Queue(cmd)
 		}
 	}
