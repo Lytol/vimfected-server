@@ -3,7 +3,7 @@ package game
 import "time"
 
 const (
-	PlayerSpeed = 100
+	PlayerSpeed = 250 // ms per action
 )
 
 type Player struct {
@@ -11,15 +11,15 @@ type Player struct {
 	X  int64  `json:"x"`
 	Y  int64  `json:"y"`
 
-	lastMovedAt time.Time
+	lastActionAt time.Time
 }
 
 func (p *Player) Move(x int64, y int64) {
 	p.X = x
 	p.Y = y
-	p.lastMovedAt = time.Now()
+	p.lastActionAt = time.Now()
 }
 
-func (p *Player) IsReadyToMove() bool {
-	return time.Since(p.lastMovedAt) > time.Millisecond*PlayerSpeed
+func (p *Player) IsReady() bool {
+	return time.Since(p.lastActionAt) > time.Millisecond*PlayerSpeed
 }

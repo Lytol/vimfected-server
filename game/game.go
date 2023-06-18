@@ -94,38 +94,42 @@ func (g *Game) Queue(cmd Command) {
 
 func (g *Game) Update(delta float64) {
 	// Process all pending commands
-	for {
-		cmd, ok := g.Incoming.Unshift()
-		if !ok {
-			return
-		}
-		log.Printf("Incoming Command %s | Id: %s | %s\n", cmd.Type, cmd.Id, cmd.Data)
-
-		g.handleCommand(cmd)
-	}
+	g.Incoming.Each(func(cmd Command) bool {
+		return g.handleCommand(cmd)
+	})
 }
 
-func (g *Game) handleCommand(cmd Command) {
+func (g *Game) handleCommand(cmd Command) bool {
 	switch cmd.Type {
+	case ClearPlayerInput:
+		g.Incoming.ClearUntil(cmd)
+		return true
 	case MovePlayerInput:
 		var movePlayerInputData MovePlayerInputData
-
-		err := json.Unmarshal(cmd.Data, &movePlayerInputData)
-		if err != nil {
-			log.Printf("Error unmarshalling move player input data: %v\n", err)
-			return
-		}
 
 		// TODO: players should only be able to move themselves
 		player, ok := g.Players[cmd.Id]
 		if !ok {
 			log.Printf("Player not found: %s\n", cmd.Id)
-			return
+			return true
+		}
+
+		if !player.IsReady() {
+			return false
+		}
+
+		err := json.Unmarshal(cmd.Data, &movePlayerInputData)
+		if err != nil {
+			log.Printf("Error unmarshalling move player input data: %v\n", err)
+			return true
 		}
 
 		g.MovePlayer(player, movePlayerInputData.Direction)
+
+		return true
 	default:
 		log.Printf("Unknown command: %s\n", cmd.Type)
+		return true
 	}
 }
 
@@ -179,10 +183,6 @@ func (g *Game) RemovePlayer(p *Player) error {
 }
 
 func (g *Game) MovePlayer(player *Player, dir Direction) bool {
-	if !player.IsReadyToMove() {
-		return false
-	}
-
 	newX := player.X
 	newY := player.Y
 

@@ -113,7 +113,6 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) subscribe(ctx context.Context, ws *websocket.Conn) error {
 	var (
-		cmd        game.Command
 		err        error
 		registered bool
 	)
@@ -121,10 +120,12 @@ func (s *Server) subscribe(ctx context.Context, ws *websocket.Conn) error {
 	registered = false
 
 	for {
+		cmd := game.Command{}
 		err = wsjson.Read(ctx, ws, &cmd)
 		if err != nil {
 			return err
 		}
+		cmd.Timestamp = time.Now()
 
 		if !registered && cmd.Type == game.Register {
 			log.Printf("subscribing %s\n", cmd.Id)

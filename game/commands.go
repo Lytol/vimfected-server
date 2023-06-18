@@ -2,6 +2,7 @@ package game
 
 import (
 	"encoding/json"
+	"time"
 )
 
 type Type string
@@ -13,13 +14,15 @@ const (
 	RemovePlayer Type = "remove_player"
 	MovePlayer   Type = "move_player"
 
-	MovePlayerInput Type = "move_player_input"
+	MovePlayerInput  Type = "move_player_input"
+	ClearPlayerInput Type = "clear_player_input"
 )
 
 type Command struct {
-	Type Type            `json:"type"`
-	Id   string          `json:"id"`
-	Data json.RawMessage `json:"data"`
+	Type      Type            `json:"type"`
+	Id        string          `json:"id"`
+	Data      json.RawMessage `json:"data"`
+	Timestamp time.Time       `json:"-"`
 }
 
 type RegisterData struct{}
